@@ -1,4 +1,4 @@
-# 📈 Research Tool: AI-Powered Equity Analysis
+# 📈 Research Tool: AI-Powered News Analysis
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://research-tool-cefmtbpsflvtrebncoucog.streamlit.app/)
 
