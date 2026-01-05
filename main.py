@@ -14,18 +14,12 @@ from langchain_community.vectorstores import FAISS
 st.set_page_config(page_title="RockyBot: Equity Research Tool", layout="wide")
 st.title("RockyBot: Equity Research Tool 📈")
 
-# 2. Sidebar for User Inputs
-st.sidebar.title("News Article URLs")
-urls = []
-for i in range(3):
-    url = st.sidebar.text_input(f"URL {i+1}")
-    if url:
-        urls.append(url)
+# 2. Sidebar for User Inputs (Changed to Single URL)
+st.sidebar.title("News Article URL")
+url = st.sidebar.text_input("Paste URL here")
+process_url_clicked = st.sidebar.button("Analyze Article")
 
-process_url_clicked = st.sidebar.button("Process URLs")
-
-# 3. Load API Key securely from Streamlit Secrets
-# We will set this up in Step 4
+# 3. Load API Key
 try:
     api_key = st.secrets["OPENROUTER_API_KEY"]
 except:
@@ -37,13 +31,14 @@ file_path = "faiss_store_openai.pkl"
 main_placeholder = st.empty()
 
 if process_url_clicked:
-    if not urls:
-        st.error("Please enter at least one URL.")
+    if not url:
+        st.error("Please enter a URL.")
     else:
         # Load Data
         main_placeholder.text("Data Loading...Started...✅")
         try:
-            loader = UnstructuredURLLoader(urls=urls)
+            # We wrap the single URL in a list because the loader expects a list
+            loader = UnstructuredURLLoader(urls=[url])
             data = loader.load()
             
             # Split Data
@@ -59,27 +54,52 @@ if process_url_clicked:
             embeddings = HuggingFaceEmbeddings()
             vectorstore_openai = FAISS.from_documents(docs, embeddings)
             
-            # Save Vector Store (Pickling)
-            # Note: In production, use a persistent DB like Pinecone, but pickle works for simple demos
+            # Save Vector Store
             with open(file_path, "wb") as f:
                 pickle.dump(vectorstore_openai, f)
                 
-            main_placeholder.success("Analysis Ready! Ask your question below.")
-        except Exception as e:
-            st.error(f"Error processing URLs: {e}")
+            main_placeholder.text("Analysis Ready!")
 
-# 5. Question & Answer Logic
-query = st.text_input("Question: ")
+            # --- NEW FEATURE: AUTO-SUMMARY ---
+            st.markdown("### 📝 Executive Summary")
+            
+            # Initialize LLM & Chain immediately for the summary
+            llm = ChatOpenAI(
+                openai_api_key=api_key,
+                base_url="https://openrouter.ai/api/v1",
+                model_name="meta-llama/llama-3.3-70b-instruct:free",
+                temperature=0.0
+            )
+            chain = RetrievalQAWithSourcesChain.from_chain_type(
+                llm=llm,
+                retriever=vectorstore_openai.as_retriever()
+            )
+            
+            # We ask the bot to summarize programmatically
+            summary_query = "Summarize the key financial points, risks, and future outlook from this article in bullet points."
+            result = chain.invoke({"question": summary_query}, return_only_outputs=True)
+            
+            # Display the summary inside a nice container
+            st.info(result["answer"])
+            # ---------------------------------
+
+        except Exception as e:
+            st.error(f"Error processing URL: {e}")
+
+# 5. Follow-up Question Logic
+st.markdown("---")
+st.subheader("Ask Follow-up Questions")
+query = st.text_input("Example: What is the target price?")
+
 if query:
     if os.path.exists(file_path):
         with open(file_path, "rb") as f:
             vectorstore = pickle.load(f)
             
-            # Initialize LLM (LLAMA-3 via OpenRouter)
             llm = ChatOpenAI(
                 openai_api_key=api_key,
                 base_url="https://openrouter.ai/api/v1",
-                model_name="meta-llama/llama-3.3-70b-instruct:free", # Using a free sturdy model
+                model_name="meta-llama/llama-3.3-70b-instruct:free",
                 temperature=0.0
             )
             
@@ -90,16 +110,10 @@ if query:
             
             result = chain.invoke({"question": query}, return_only_outputs=True)
             
-            # Display Answer
-            st.header("Answer")
             st.write(result["answer"])
             
-            # Display Sources
             sources = result.get("sources", "")
             if sources:
-                st.subheader("Sources:")
-                sources_list = sources.split("\n")  
-                for source in sources_list:
-                    st.write(source)
+                st.caption(f"Sources: {sources}")
     else:
-        st.warning("Please process URLs first.")
+        st.warning("Please analyze an article first.")
