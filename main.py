@@ -10,8 +10,8 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 
 # 1. Page Config
-st.set_page_config(page_title="RockyBot: Equity Research Tool", layout="wide")
-st.title("RockyBot: Equity Research Tool 📈")
+st.set_page_config(page_title="Research Tool", layout="wide")
+st.title("Research Tool 📈")
 
 # 2. Sidebar
 st.sidebar.title("News Article URL")
