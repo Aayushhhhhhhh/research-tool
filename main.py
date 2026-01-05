@@ -108,27 +108,6 @@ query = st.text_input("Example: What is the target price?")
 
 if query:
     if st.session_state.vectorstore:
-        # 1. METRIC: Retrieve Docs with Similarity Scores
-        # We search for the top 3 most relevant chunks and their "Distance" scores
-        docs_and_scores = st.session_state.vectorstore.similarity_search_with_score(query, k=3)
-        
-        # Display the "Accuracy Metrics" (Relevance Scores)
-        st.markdown("### 📊 Retrieval Metrics")
-        col1, col2, col3 = st.columns(3)
-        
-        # FAISS returns 'L2 Distance'. Lower is better. 
-        # A score < 1.0 usually means good relevance.
-        top_score = docs_and_scores[0][1]
-        
-        # We can normalize this to a 0-100% "Confidence" scale roughly
-        # (This is an approximation for UI purposes)
-        confidence = max(0, 100 - (top_score * 100))
-        
-        col1.metric("Top Match Confidence", f"{confidence:.1f}%")
-        col2.metric("Raw L2 Distance", f"{top_score:.4f}")
-        col3.caption("Lower distance = Better match. Scores > 1.2 may imply low relevance.")
-
-        # 2. Generate the Answer
         llm = get_llm()
         chain = RetrievalQAWithSourcesChain.from_chain_type(
             llm=llm,
@@ -136,15 +115,9 @@ if query:
         )
         
         result = chain.invoke({"question": query}, return_only_outputs=True)
-        st.write("### 🤖 Answer")
         st.write(result["answer"])
         
-        # 3. Show Sources with their individual scores
         if result.get("sources"):
-            with st.expander("🔍 View Source Details & Individual Scores"):
-                for doc, score in docs_and_scores:
-                    st.markdown(f"**Relevance Score:** {score:.4f}")
-                    st.write(doc.page_content[:200] + "...") # Show first 200 chars
-                    st.markdown("---")
+            st.caption(f"Sources: {result['sources']}")
     else:
         st.warning("Please analyze an article first.")
