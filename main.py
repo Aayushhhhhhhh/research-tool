@@ -14,34 +14,39 @@ from langchain_community.vectorstores import FAISS
 st.set_page_config(page_title="RockyBot: Equity Research Tool", layout="wide")
 st.title("RockyBot: Equity Research Tool 📈")
 
-# 2. Sidebar for User Inputs (Changed to Single URL)
+# 2. Sidebar
 st.sidebar.title("News Article URL")
 url = st.sidebar.text_input("Paste URL here")
 process_url_clicked = st.sidebar.button("Analyze Article")
 
-# 3. Load API Key
+# 3. API Key Check
 try:
     api_key = st.secrets["OPENROUTER_API_KEY"]
 except:
     st.error("API Key not found. Please set OPENROUTER_API_KEY in Streamlit secrets.")
     st.stop()
 
-# 4. Processing Logic
+# 4. File Path
 file_path = "faiss_store_openai.pkl"
 main_placeholder = st.empty()
 
+# 5. Initialize Session State for Summary
+if "summary" not in st.session_state:
+    st.session_state.summary = None
+
+# 6. Processing Logic (Runs only when button is clicked)
 if process_url_clicked:
     if not url:
         st.error("Please enter a URL.")
     else:
-        # Load Data
+        # Reset summary for new analysis
+        st.session_state.summary = None
+        
         main_placeholder.text("Data Loading...Started...✅")
         try:
-            # We wrap the single URL in a list because the loader expects a list
             loader = UnstructuredURLLoader(urls=[url])
             data = loader.load()
             
-            # Split Data
             main_placeholder.text("Text Splitting...Started...✅")
             text_splitter = RecursiveCharacterTextSplitter(
                 separators=['\n\n', '\n', '.', ','],
@@ -49,21 +54,16 @@ if process_url_clicked:
             )
             docs = text_splitter.split_documents(data)
             
-            # Create Embeddings
             main_placeholder.text("Embedding Vector Building...Started...✅")
             embeddings = HuggingFaceEmbeddings()
             vectorstore_openai = FAISS.from_documents(docs, embeddings)
             
-            # Save Vector Store
             with open(file_path, "wb") as f:
                 pickle.dump(vectorstore_openai, f)
                 
             main_placeholder.text("Analysis Ready!")
 
-            # --- NEW FEATURE: AUTO-SUMMARY ---
-            st.markdown("### 📝 Executive Summary")
-            
-            # Initialize LLM & Chain immediately for the summary
+            # --- GENERATE SUMMARY ---
             llm = ChatOpenAI(
                 openai_api_key=api_key,
                 base_url="https://openrouter.ai/api/v1",
@@ -75,18 +75,22 @@ if process_url_clicked:
                 retriever=vectorstore_openai.as_retriever()
             )
             
-            # We ask the bot to summarize programmatically
             summary_query = "Summarize the key financial points, risks, and future outlook from this article in bullet points."
             result = chain.invoke({"question": summary_query}, return_only_outputs=True)
             
-            # Display the summary inside a nice container
-            st.info(result["answer"])
-            # ---------------------------------
+            # STORE SUMMARY IN SESSION STATE
+            st.session_state.summary = result["answer"]
+            # ------------------------
 
         except Exception as e:
             st.error(f"Error processing URL: {e}")
 
-# 5. Follow-up Question Logic
+# 7. Display Summary (Runs on EVERY refresh if summary exists)
+if st.session_state.summary:
+    st.markdown("### 📝 Executive Summary")
+    st.info(st.session_state.summary)
+
+# 8. Follow-up Question Logic
 st.markdown("---")
 st.subheader("Ask Follow-up Questions")
 query = st.text_input("Example: What is the target price?")
